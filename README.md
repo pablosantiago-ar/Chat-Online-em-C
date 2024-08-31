@@ -25,6 +25,7 @@ Server.c
 - `Função broadcast_message`: Envia uma mensagem para todos os clientes conectados, exceto o remetente.
 - `Função handle_client`: Trata as mensagens enviadas por um cliente, repassando-as para todos os outros clientes conectados.
 - `Multithreading`: Utiliza threads para lidar com múltiplos clientes simultaneamente.
+
 Client.c
 - `Função receive_messages`: Recebe e exibe mensagens do servidor em um loop.
 - `Seleção de Emoticons`: Permite que o usuário escolha um emoticon e o anexe às suas mensagens.
