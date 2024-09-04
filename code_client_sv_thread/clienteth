@@ -1,0 +1,91 @@
+#include <winsock2.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#pragma comment(lib, "Ws2_32.lib")
+
+int clientconfig()
+{
+    // Descritor do cliente
+    SOCKET clienteSockfd;
+    // Estrutura do Cliente
+    struct sockaddr_in serv_addr;
+    WSADATA wsaData;
+    int result;
+
+    // Inicializa o Winsock
+    result = WSAStartup(MAKEWORD(2,2), &wsaData);
+    if (result != 0) {
+        printf("WSAStartup failed: %d\n", result);
+        exit(1);
+    }
+
+    // Socket familia TCP declarado SOCK_STREAM e criado
+    clienteSockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (clienteSockfd == INVALID_SOCKET) {
+        printf("Erro no Socket: %d\n", WSAGetLastError());
+        WSACleanup();
+        exit(1);
+    }
+
+    // Zera a estrutura
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    // Seta a familia
+    serv_addr.sin_family = AF_INET;
+    // Define o IP (o localhost)
+    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    // Define a porta de conexao (deve corresponder à do servidor)
+    serv_addr.sin_port = htons(8888);  
+
+    // Faz a conexao com o servidor
+    if (connect(clienteSockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == SOCKET_ERROR) {
+        printf("Erro no Connect: %d\n", WSAGetLastError());
+        closesocket(clienteSockfd);
+        WSACleanup();
+        exit(1);
+    }
+
+    return clienteSockfd;
+}
+
+void Cliente(SOCKET clienteSockfd)
+{
+    // Buffer de dados a ser mandado para o servidor
+    char buffersv[512];
+    char msg[150];
+    char inicio[] = "O cliente ";
+    char nome[15];
+    char fim[] = " foi conectado.";
+
+    printf("----------------------------------------------------------------------------------------------\n");
+    printf("Servidor: Digite seu nome.\n");
+    scanf("%s", nome);
+    printf("----------------------------------------------------------------------------------------------\n");
+    printf("Servidor: Conectado ao servidor.\n");
+    printf("Servidor: Digite \"quit\" quando quiser encerrar a conexao.\n");
+    printf("----------------------------------------------------------------------------------------------\n");
+    strcpy(msg, inicio);
+    strcat(msg, nome);
+    strcat(msg, fim);
+    send(clienteSockfd, msg, strlen(msg), 0);
+    do {
+        scanf("%s", buffersv);
+        if (strcmp(buffersv, "quit") == 0)
+            printf("\nServidor: Encerrando a conexao neste cliente...\n");
+        else
+            printf("Servidor: Comando invalido.\n");
+        
+    } while (strcmp(buffersv, "quit") != 0);
+
+    // Encerra o descritor
+    closesocket(clienteSockfd);
+    WSACleanup();
+}
+
+int main()
+{
+    SOCKET descritorCliente = clientconfig();
+    // Chama função do cliente passando o descritor
+    Cliente(descritorCliente);
+    return 0;
+}
