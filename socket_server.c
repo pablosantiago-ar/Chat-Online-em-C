@@ -1,196 +1,194 @@
-//****************************************************************************
-// Comunicacao de Dados
-// Professor: Gustavo Kunzel
-// Servidor TCP simples 
-// Implementa um servidor TCP que aguarda o recebimento de pacotes de 
-// diferentes clientes em uma porta
-// Nota: a biblioteca -lws2_32 deve ser incluida no linker para funcionar
-//     no projeto do DEV já foi incluido atraves das opcoes de projeto
-//****************************************************************************
 #include <winsock2.h>
-#include <windows.h>
-#include <ws2tcpip.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <pthread.h>
-// **************************************************************************
-// definicoes iniciais
-#define TAMANHO_BUFFER 1024          // tamanho do buffer de recepcao e envio
-#define DEFAULT_PORT "8888"        // porta de comunicacao que sera usada
-// **************************************************************************
+#include <stdlib.h>
+#include <string.h>
+#include <process.h> // Biblioteca da _beginthreadex() e _endthreadex()
+#include <ws2tcpip.h> // Biblioteca TCP/IP
+#pragma comment(lib, "Ws2_32.lib")
 
-// esvaziar a string
-void zerar_string(char string[]){
-    int i;
-    // criar contador para receber o endereço de string
-    char *p;
-    // alocação do endereço
-    p = &string[0];
-    for(i=0; i<TAMANHO_BUFFER; i++){
-        // esvaziar a string
-        p[i] = '\0';
+#define PORT 8888
+#define TAMANHO_BUFFER 1024
+#define MAX_CLIENTES 10
+
+typedef struct {
+    SOCKET socket;
+    char nome[30];
+} Cliente;
+
+Cliente clientes[MAX_CLIENTES];
+int num_clientes = 0;
+
+// Função para enviar uma mensagem para todos os clientes, exceto o cliente excluído
+void BroadcastMessage(const char* mensagem, SOCKET socket_excluir) {
+    for (int i = 0; i < num_clientes; i++) {
+        if (clientes[i].socket != socket_excluir) {
+            send(clientes[i].socket, mensagem, strlen(mensagem), 0);
+        }
     }
-
 }
 
-int __cdecl main(void) {
-    // variaveis
-    WSADATA wsaData;   // variavel para o winsock                                                        
-    int iResult;       // variavel de status
-    // sockets para conexao com o servidor
-    SOCKET ListenSocket = INVALID_SOCKET;
-    SOCKET ClientSocket = INVALID_SOCKET;
-    // estrutura de enderecos
-    struct addrinfo *result = NULL;
-    struct addrinfo hints;
-    // buffers de recepcao e envio
-    int iSendResult;
-    char recvbuf[TAMANHO_BUFFER];
-    int recvbuflen = TAMANHO_BUFFER;     // comprimento do buffer de recepcao  
-      
+// Função que será executada em uma thread para gerenciar cada cliente
+unsigned __stdcall Servidor(void* arg) {
+    char buffer[TAMANHO_BUFFER];
+    SOCKET sockEntrada = *(SOCKET*)arg; // Cast do ponteiro para um ponteiro SOCKET
+    int index_cliente = -1;
 
-    // inicializa o winsock
-    iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-    if (iResult != 0) {
-        printf("WSAStartup falhou com o erro: %d\n", iResult);
-        system("pause");
-        return 1;
+    // Receber nome do cliente
+    int bytesReceived = recv(sockEntrada, buffer, sizeof(buffer) - 1, 0);
+    if (bytesReceived > 0) {
+        buffer[bytesReceived] = '\0';
+
+        // Adicionar cliente à lista
+        for (int i = 0; i < MAX_CLIENTES; i++) {
+            if (clientes[i].socket == 0) {
+                clientes[i].socket = sockEntrada;
+                strcpy(clientes[i].nome, buffer);
+                num_clientes++;
+                index_cliente = i;
+                break;
+            }
+        }
+        if (index_cliente == -1) {
+            printf("Número máximo de clientes alcançado.\n");
+            closesocket(sockEntrada);
+            _endthreadex(0);
+        }
+    } else {
+        closesocket(sockEntrada);
+        _endthreadex(0);
     }
 
-     // pega informacoes da maquina
-    char hostname[NI_MAXHOST];        // guarda nome da maquina
-    gethostname(hostname,NI_MAXHOST); // pega nome da maquina
-    printf("*************\nServidor: Meu nome: %s\n",hostname);
+    printf("Cliente %s conectado...\n", clientes[index_cliente].nome);
 
-    // pega o ip da maquina e exibe
-    PHOSTENT phe = gethostbyname(hostname);     
+    // Notificar outros clientes sobre a nova conexão
+    char mensagem[TAMANHO_BUFFER];
+    snprintf(mensagem, sizeof(mensagem), "O cliente %s foi conectado.\n", clientes[index_cliente].nome);
+    BroadcastMessage(mensagem, sockEntrada);
+
+    while (1) {
+        bytesReceived = recv(sockEntrada, buffer, sizeof(buffer) - 1, 0);
+        if (bytesReceived > 0) {
+            buffer[bytesReceived] = '\0';
+
+            // Imprimir a mensagem recebida no terminal do servidor
+            printf("Mensagem recebida de %s: %s\n", clientes[index_cliente].nome, buffer);
+
+            if (strcmp(buffer, "quit") == 0) {
+                // Remover cliente da lista
+                closesocket(sockEntrada);
+                num_clientes--;
+                for (int i = index_cliente; i < num_clientes; i++) {
+                    clientes[i] = clientes[i + 1];
+                }
+                clientes[num_clientes].socket = 0; // Limpar o slot final
+                snprintf(mensagem, sizeof(mensagem), "O cliente %s desconectou.\n", clientes[index_cliente].nome);
+                BroadcastMessage(mensagem, INVALID_SOCKET);
+                _endthreadex(0);
+            } else {
+                // Enviar mensagem para todos os clientes
+                snprintf(mensagem, sizeof(mensagem), "%s: %s\n", clientes[index_cliente].nome, buffer);
+                BroadcastMessage(mensagem, sockEntrada);
+            }
+        } else {
+            // Conexão fechada
+            closesocket(sockEntrada);
+            num_clientes--;
+            for (int i = index_cliente; i < num_clientes; i++) {
+                clientes[i] = clientes[i + 1];
+            }
+            clientes[num_clientes].socket = 0; // Limpar o slot final
+            snprintf(mensagem, sizeof(mensagem), "O cliente %s desconectou.\n", clientes[index_cliente].nome);
+            BroadcastMessage(mensagem, INVALID_SOCKET);
+            _endthreadex(0);
+        }
+    }
+    return 0;
+}
+
+// Função para configurar o servidor
+SOCKET configuracaoServidor() {
+    SOCKET sockfd;
+    struct sockaddr_in serverAddr;
+    WSADATA wsaData;
+    int result;
+
+    result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (result != 0) {
+        printf("WSAStartup failed: %d\n", result);
+        exit(1);
+    }
+
+    sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sockfd == INVALID_SOCKET) {
+        printf("Erro no Socket: %d\n", WSAGetLastError());
+        WSACleanup();
+        exit(1);
+    }
+    
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverAddr.sin_port = htons(PORT);
+
+    if (bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        printf("Erro no Bind: %d\n", WSAGetLastError());
+        closesocket(sockfd);
+        WSACleanup();
+        exit(1);
+    }
+
+    if (listen(sockfd, 5) == SOCKET_ERROR) {
+        printf("Erro na escuta: %d\n", WSAGetLastError());
+        closesocket(sockfd);
+        WSACleanup();
+        exit(1);
+    }
+
+    return sockfd;
+}
+
+int main() {
+    char hostname[NI_MAXHOST];
+    struct sockaddr_in clienteAddr;
     int i;
+    SOCKET sockfd = configuracaoServidor();
+
+    gethostname(hostname, NI_MAXHOST);
+    printf("*************\nServidor: Meu nome: %s\n", hostname);
+    PHOSTENT phe = gethostbyname(hostname);
     for (i = 0; phe->h_addr_list[i] != 0; ++i) {
         struct in_addr addr;
         memcpy(&addr, phe->h_addr_list[i], sizeof(struct in_addr));
-        printf("Servidor: Meu endereco IP (%d): %s\n",i, inet_ntoa(addr));        
-        
+        printf("Servidor: Meu endereco IP (%d): %s\n", i, inet_ntoa(addr));
     }
 
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_PASSIVE;
+    while (1) {
+        SOCKET clienteSockfd;
+        unsigned int clntLen = sizeof(clienteAddr);
+        HANDLE thread;
 
-    // Resolve o endereco do servidor e a porta 
-    iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
-    if ( iResult != 0 ) {
-        printf("getaddrinfo falhou com erro: %d\n", iResult);
-        WSACleanup();
-        system("pause");
-        return 1;
-    }
-
-    // Cria um socket para conexao com o servidor
-    ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (ListenSocket == INVALID_SOCKET) {
-        printf("socket falhou com erro: %ld\n", WSAGetLastError());
-        freeaddrinfo(result);
-        WSACleanup();
-        system("pause");
-        return 1;
-    }
-
-    // Configura o socket TCP do servidor
-    iResult = bind( ListenSocket, result->ai_addr, (int)result->ai_addrlen);
-    if (iResult == SOCKET_ERROR) {
-        printf("bind falhou com erro: %d\n", WSAGetLastError());
-        freeaddrinfo(result);
-        closesocket(ListenSocket);
-        WSACleanup();
-        system("pause");
-        return 1;
-    }
-
-
-    freeaddrinfo(result);
-
-    // Escuta aguardando um cliente 
-    printf("*************\nServidor: Estou aguardando um cliente na porta %s...\n", DEFAULT_PORT);
-    iResult = listen(ListenSocket, SOMAXCONN);
-    if (iResult == SOCKET_ERROR) {
-        printf("listen falhou com erro: %d\n", WSAGetLastError());
-        closesocket(ListenSocket);
-        WSACleanup();
-        system("pause");
-        return 1;
-    }
-
-    // Aceita o socket com o cliente
-    ClientSocket = accept(ListenSocket, NULL, NULL);
-    if (ClientSocket == INVALID_SOCKET) {
-        printf("accept falhou com erro: %d\n", WSAGetLastError());
-        closesocket(ListenSocket);
-        WSACleanup();
-        system("pause");
-        return 1;
-    }
-
-    // printf("Cliente aceito: %s\n",inet_ntoa(addr));
-
-    // No longer need server socket
-    closesocket(ListenSocket);
-
-    // *********************************************************************
-    // Estabeleceu conexao com o cliente e pode trocar dados
-    do {
-
-        iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
-        if (iResult > 0) {
-            printf("Mensagem recebida: \"%s\"\n", recvbuf);
-
-            // esvaziar a string
-            zerar_string(recvbuf);
-
-            recvbuf[strcspn(recvbuf, "\n")] = 0;
-
-            /*
-            // Echo the buffer back to the sender
-            iSendResult = send( ClientSocket, recvbuf, iResult, 0 );
-            if (iSendResult == SOCKET_ERROR) {
-                printf("send failed with error: %d\n", WSAGetLastError());
-                closesocket(ClientSocket);
-                WSACleanup();
-                system("pause");
-                return 1;
-            }
-            printf("Bytes sent: %d\n", iSendResult);
-            */
-        }
-        else if (iResult == 0)
-            printf("Fechando conexao...\n");
-        else  {
-            printf("recv falhou com o erro: %d\n", WSAGetLastError());
-            closesocket(ClientSocket);
+        clienteSockfd = accept(sockfd, (struct sockaddr*)&clienteAddr, &clntLen);
+        if (clienteSockfd == INVALID_SOCKET) {
+            printf("Erro no Accept: %d\n", WSAGetLastError());
+            closesocket(sockfd);
             WSACleanup();
-            system("pause");
-            return 1;
+            exit(1);
         }
 
-    } while (iResult > 0);
-
-    // *********************************************************************
-    // Encerra a conexao
-    iResult = shutdown(ClientSocket, SD_SEND);
-    if (iResult == SOCKET_ERROR) {
-        printf("shutdown failed with error: %d\n", WSAGetLastError());
-        closesocket(ClientSocket);
-        WSACleanup();
-        system("pause");
-        return 1;
+        // Inicializa a thread
+        unsigned threadID;
+        thread = (HANDLE)_beginthreadex(NULL, 0, Servidor, (void*)&clienteSockfd, 0, &threadID);
+        if (thread == NULL) {
+            printf("Erro na Thread: %d\n", GetLastError());
+            closesocket(clienteSockfd);
+            closesocket(sockfd);
+            WSACleanup();
+            exit(1);
+        }
+        CloseHandle(thread);
     }
 
-    // cleanup
-    printf("Encerrando socket...");
-    closesocket(ClientSocket);
+    closesocket(sockfd);
     WSACleanup();
-
-    system("pause");
     return 0;
 }
