@@ -25,22 +25,35 @@ Server.c
 - `Função broadcast_message`: Envia uma mensagem para todos os clientes conectados, exceto o remetente.
 - `Função handle_client`: Trata as mensagens enviadas por um cliente, repassando-as para todos os outros clientes conectados.
 - `Multithreading`: Utiliza threads para lidar com múltiplos clientes simultaneamente.
+- `EnviarHistorico`: Função para enviar o histórico de mensagens para um novo cliente.
+- `ApagarHistorico`: Função para apagar o arquivo do histórico.
 
 Client.c
 - `Função receive_messages`: Recebe e exibe mensagens do servidor em um loop.
-- `Seleção de Emoticons`: Permite que o usuário escolha um emoticon e o anexe às suas mensagens.
+- `Seleção de Emoticons`: Permite que o usuário escolha um emoticon e o anexe às suas mensagens. Versão atualizada na qual estão disponíveis emoticons Unicode 😊.
 - `Prompt de Mensagens`: Exibe um prompt para que o usuário digite suas mensagens.
+- `Zerar Strings`: Função para zerar uma string, substituindo caracteres por espaços.
+- `Menu`: Função que exibe um menu interativo, no qual permiete acessar o chat ou ver os comando disponíveis no código.
+
+## Comandos Especiais
+- `/APAGAR_HISTORICO`: Envia comando para apagar o histórico do Chat.
+- `/quit`: Envia comando para o usuário sair da conversa.
+- `/emoticons`: Envia comando o usuário selecionar um emoticon para adicionar ao texto.
 
 ## Autores
 
-- [@mariafernandabq](https://www.github.com/mariafernandabq)
+- [Maria Fernanda](https://www.github.com/mariafernandabq)
 
-- [@pablosantiago-ar](https://www.github.com/pablosantiago-ar)
+- [Pablo Santiago](https://www.github.com/pablosantiago-ar)
 
-- [@diego-amvi](https://www.github.com/diego-amvi)
+- [Diego Amorim](https://www.github.com/diego-amvi)
 
-- [@JoaopedroQR](https://www.github.com/JoaopedroQR)
+- [João Pedro Queiroz](https://www.github.com/JoaopedroQR)
 
-- [@tavinml](https://www.github.com/tavinml)
+- [Gustavo Monteiro](https://www.github.com/tavinml)
+
+- [Pedro Paulo Teixeira](https://github.com/pedrolvrx86)
+
+- Rafael Soares
 
 Projeto de um Chat Online em C para a disciplina de Introdução a programação, do S1 de Engenharia de Computação
